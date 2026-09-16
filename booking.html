@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>קביעת תור</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f4f6f8;
+      margin: 0;
+      padding: 20px;
+      direction: rtl;
+    }
+    .card {
+      max-width: 480px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    h1 {
+      font-size: 20px;
+      margin-top: 0;
+      color: #1a1a1a;
+      text-align: center;
+    }
+    label {
+      display: block;
+      margin-top: 16px;
+      margin-bottom: 6px;
+      font-weight: bold;
+      font-size: 14px;
+      color: #333;
+    }
+    input[type="text"], input[type="tel"], input[type="date"], textarea, select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: inherit;
+    }
+    .type-options {
+      display: flex;
+      gap: 10px;
+      margin-top: 6px;
+    }
+    .type-btn {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      text-align: center;
+      cursor: pointer;
+      background: #fafafa;
+      font-size: 14px;
+    }
+    .type-btn.selected {
+      border-color: #2563eb;
+      background: #eaf1ff;
+      font-weight: bold;
+      color: #2563eb;
+    }
+    .slots-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .slot-btn {
+      padding: 10px 4px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      text-align: center;
+    }
+    .slot-btn.selected {
+      background: #2563eb;
+      color: #fff;
+      border-color: #2563eb;
+    }
+    .msg {
+      margin-top: 14px;
+      font-size: 14px;
+      padding: 10px;
+      border-radius: 8px;
+    }
+    .msg.info { background: #eef2ff; color: #3730a3; }
+    .msg.error { background: #fee2e2; color: #991b1b; }
+    .msg.success { background: #dcfce7; color: #166534; }
+    button.submit {
+      width: 100%;
+      margin-top: 20px;
+      padding: 14px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button.submit:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+    .loading { text-align: center; color: #888; padding: 10px; font-size: 14px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>קביעת תור לפגישה</h1>
+
+    <label>סוג פגישה</label>
+    <div class="type-options">
+      <div class="type-btn selected" data-type="regular">פגישה רגילה</div>
+      <div class="type-btn" data-type="exam">שירותי מבחן</div>
+    </div>
+    <div id="type-note" class="msg info hidden"></div>
+
+    <label for="date">תאריך</label>
+    <input type="date" id="date">
+
+    <div id="slots-container" class="hidden">
+      <label>שעות פנויות</label>
+      <div id="slots-loading" class="loading hidden">טוען שעות פנויות...</div>
+      <div id="slots-grid" class="slots-grid"></div>
+      <div id="slots-empty" class="msg info hidden"></div>
+    </div>
+
+    <label for="name">שם מלא</label>
+    <input type="text" id="name" placeholder="שם מלא">
+
+    <label for="phone">טלפון</label>
+    <input type="tel" id="phone" placeholder="050-0000000">
+
+    <label for="notes">הערות (אופציונלי)</label>
+    <textarea id="notes" rows="2" placeholder="פרטים נוספים..."></textarea>
+
+    <button class="submit" id="submitBtn" disabled>קביעת תור</button>
+
+    <div id="resultMsg" class="msg hidden"></div>
+  </div>
+
+  <script>
+    // ==================== הגדרה - חובה לערוך ====================
+    // הדביקו כאן את כתובת ה-Web App מ-Apps Script (מסתיימת ב-/exec)
+    const APPS_SCRIPT_URL = 'PASTE_YOUR_EXEC_URL_HERE';
+
+    // ==================== תקשורת JSONP עם Apps Script ====================
+    // נבחר JSONP (script tag) ולא fetch, כי זה עובד בכל דפדפן/טלפון
+    // בלי להיתקל בחסימות CORS או בבעיות דפדפן פנימי.
+    function callApi(params) {
+      return new Promise(function (resolve, reject) {
+        const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+        const timeout = setTimeout(function () {
+          cleanup();
+          reject(new Error('תם הזמן הקצוב לתקשורת עם השרת'));
+        }, 15000);
+
+        function cleanup() {
+          clearTimeout(timeout);
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+        }
+
+        window[cbName] = function (data) {
+          cleanup();
+          resolve(data);
+        };
+
+        const query = Object.keys(params)
+          .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); })
+          .join('&');
+
+        const script = document.createElement('script');
+        script.src = APPS_SCRIPT_URL + '?' + query + '&callback=' + cbName;
+        script.onerror = function () {
+          cleanup();
+          reject(new Error('שגיאת חיבור לשרת'));
+        };
+        document.body.appendChild(script);
+      });
+    }
+
+    let selectedType = 'regular';
+    let selectedTime = null;
+
+    const typeBtns = document.querySelectorAll('.type-btn');
+    const dateInput = document.getElementById('date');
+    const slotsContainer = document.getElementById('slots-container');
+    const slotsGrid = document.getElementById('slots-grid');
+    const slotsLoading = document.getElementById('slots-loading');
+    const slotsEmpty = document.getElementById('slots-empty');
+    const submitBtn = document.getElementById('submitBtn');
+    const resultMsg = document.getElementById('resultMsg');
+    const typeNote = document.getElementById('type-note');
+
+    const today = new Date();
+    dateInput.min = today.toISOString().split('T')[0];
+
+    typeBtns.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        typeBtns.forEach(function (b) { b.classList.remove('selected'); });
+        btn.classList.add('selected');
+        selectedType = btn.dataset.type;
+        selectedTime = null;
+        updateSubmitState();
+        if (selectedType === 'exam') {
+          typeNote.textContent = 'שירותי מבחן מתקבלים רק בימי שני';
+          typeNote.classList.remove('hidden');
+        } else {
+          typeNote.classList.add('hidden');
+        }
+        if (dateInput.value) loadSlots();
+      });
+    });
+
+    dateInput.addEventListener('change', function () {
+      selectedTime = null;
+      updateSubmitState();
+      if (dateInput.value) loadSlots();
+    });
+
+    function loadSlots() {
+      slotsContainer.classList.remove('hidden');
+      slotsGrid.innerHTML = '';
+      slotsEmpty.classList.add('hidden');
+      slotsLoading.classList.remove('hidden');
+
+      callApi({ action: 'getSlots', date: dateInput.value, meetingType: selectedType })
+        .then(function (res) {
+          slotsLoading.classList.add('hidden');
+          if (res.error) {
+            slotsEmpty.className = 'msg error';
+            slotsEmpty.textContent = res.error;
+            slotsEmpty.classList.remove('hidden');
+            return;
+          }
+          if (!res.slots || res.slots.length === 0) {
+            slotsEmpty.className = 'msg info';
+            slotsEmpty.textContent = res.reason === 'no_reception_day'
+              ? 'אין קבלת קהל בתאריך זה עבור סוג פגישה זה.'
+              : 'אין שעות פנויות בתאריך זה. נא לבחור תאריך אחר.';
+            slotsEmpty.classList.remove('hidden');
+            return;
+          }
+          res.slots.forEach(function (slot) {
+            const btn = document.createElement('div');
+            btn.className = 'slot-btn';
+            btn.textContent = slot;
+            btn.addEventListener('click', function () {
+              document.querySelectorAll('.slot-btn').forEach(function (b) {
+                b.classList.remove('selected');
+              });
+              btn.classList.add('selected');
+              selectedTime = slot;
+              updateSubmitState();
+            });
+            slotsGrid.appendChild(btn);
+          });
+        })
+        .catch(function (err) {
+          slotsLoading.classList.add('hidden');
+          slotsEmpty.className = 'msg error';
+          slotsEmpty.textContent = 'שגיאה בטעינת השעות: ' + err.message;
+          slotsEmpty.classList.remove('hidden');
+        });
+    }
+
+    function updateSubmitState() {
+      const name = document.getElementById('name').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      submitBtn.disabled = !(selectedTime && dateInput.value && name && phone);
+    }
+
+    ['name', 'phone'].forEach(function (id) {
+      document.getElementById(id).addEventListener('input', updateSubmitState);
+    });
+
+    submitBtn.addEventListener('click', function () {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'שולח...';
+      resultMsg.classList.add('hidden');
+
+      const payload = {
+        action: 'book',
+        name: document.getElementById('name').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        notes: document.getElementById('notes').value.trim(),
+        meetingType: selectedType,
+        date: dateInput.value,
+        time: selectedTime
+      };
+
+      callApi(payload)
+        .then(function (res) {
+          submitBtn.textContent = 'קביעת תור';
+          if (res.success) {
+            resultMsg.className = 'msg success';
+            resultMsg.textContent = res.message;
+            resultMsg.classList.remove('hidden');
+            submitBtn.classList.add('hidden');
+          } else {
+            resultMsg.className = 'msg error';
+            resultMsg.textContent = res.message || res.error || 'שגיאה לא ידועה';
+            resultMsg.classList.remove('hidden');
+            submitBtn.disabled = false;
+            loadSlots();
+          }
+        })
+        .catch(function (err) {
+          submitBtn.textContent = 'קביעת תור';
+          submitBtn.disabled = false;
+          resultMsg.className = 'msg error';
+          resultMsg.textContent = 'שגיאה בשליחת הבקשה: ' + err.message;
+          resultMsg.classList.remove('hidden');
+        });
+    });
+  </script>
+</body>
+</html>
