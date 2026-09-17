@@ -64,6 +64,22 @@
       font-weight: bold;
       color: #2563eb;
     }
+    .format-btn {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      text-align: center;
+      cursor: pointer;
+      background: #fafafa;
+      font-size: 14px;
+    }
+    .format-btn.selected {
+      border-color: #2563eb;
+      background: #eaf1ff;
+      font-weight: bold;
+      color: #2563eb;
+    }
     .slots-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -135,6 +151,12 @@
       <div class="type-btn" data-type="exam">שירותי מבחן</div>
     </div>
     <div id="type-note" class="msg info hidden"></div>
+
+    <label>אופן הפגישה</label>
+    <div class="type-options">
+      <div class="format-btn selected" data-format="inperson">פרונטלי</div>
+      <div class="format-btn" data-format="phone">טלפוני</div>
+    </div>
 
     <label for="date">תאריך</label>
     <input type="date" id="date">
@@ -238,9 +260,11 @@
 
     // ==================== טופס ההזמנה הרגיל ====================
     let selectedType = 'regular';
+    let selectedFormat = 'inperson';
     let selectedTime = null;
 
     const typeBtns = document.querySelectorAll('.type-btn');
+    const formatBtns = document.querySelectorAll('.format-btn');
     const dateInput = document.getElementById('date');
     const slotsContainer = document.getElementById('slots-container');
     const slotsGrid = document.getElementById('slots-grid');
@@ -268,6 +292,14 @@
           typeNote.classList.add('hidden');
         }
         if (dateInput.value) loadSlots();
+      });
+    });
+
+    formatBtns.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        formatBtns.forEach(function (b) { b.classList.remove('selected'); });
+        btn.classList.add('selected');
+        selectedFormat = btn.dataset.format;
       });
     });
 
@@ -345,6 +377,7 @@
         email: document.getElementById('email').value.trim(),
         notes: document.getElementById('notes').value.trim(),
         meetingType: selectedType,
+        meetingFormat: selectedFormat,
         date: dateInput.value,
         time: selectedTime
       };
