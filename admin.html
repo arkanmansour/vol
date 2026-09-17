@@ -116,6 +116,7 @@
             <th>תאריך</th>
             <th>שעה</th>
             <th>סוג</th>
+            <th>אופן</th>
             <th>שם</th>
             <th>טלפון</th>
             <th>הערות</th>
@@ -229,6 +230,7 @@
           '<td>' + dateStr + '</td>' +
           '<td>' + timeStr + '</td>' +
           '<td><span class="type-tag">' + appt.meetingType + '</span></td>' +
+          '<td>' + (appt.meetingFormat || '') + '</td>' +
           '<td>' + appt.name + '</td>' +
           '<td>' + appt.phone + '</td>' +
           '<td>' + (appt.notes || '') + '</td>' +
