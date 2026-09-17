@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ניהול תורים</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f4f6f8;
+      margin: 0;
+      padding: 20px;
+      direction: rtl;
+    }
+    .card {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    h1 {
+      font-size: 20px;
+      margin-top: 0;
+      color: #1a1a1a;
+      text-align: center;
+    }
+    input[type="password"], input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 15px;
+    }
+    button {
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: none;
+      background: #2563eb;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    button.danger {
+      background: #fff;
+      color: #991b1b;
+      border: 1px solid #991b1b;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: right;
+      padding: 8px 6px;
+      border-bottom: 1px solid #eee;
+    }
+    th {
+      background: #f8f9fa;
+      font-weight: bold;
+    }
+    tr.cancelled { opacity: 0.4; text-decoration: line-through; }
+    .msg {
+      margin-top: 14px;
+      font-size: 14px;
+      padding: 10px;
+      border-radius: 8px;
+    }
+    .msg.info { background: #eef2ff; color: #3730a3; }
+    .msg.error { background: #fee2e2; color: #991b1b; }
+    .msg.success { background: #dcfce7; color: #166534; }
+    .hidden { display: none; }
+    .loading { text-align: center; color: #888; padding: 20px; }
+    .type-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      background: #eef2ff;
+      color: #3730a3;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>ניהול תורים</h1>
+
+    <div id="loginSection">
+      <label>סיסמת ניהול</label>
+      <input type="password" id="adminKey" placeholder="הזינו את סיסמת הניהול">
+      <div class="row">
+        <button id="loginBtn">כניסה</button>
+      </div>
+      <div id="loginMsg" class="msg error hidden"></div>
+    </div>
+
+    <div id="dashboardSection" class="hidden">
+      <div class="row" style="justify-content: space-between; align-items: center;">
+        <span id="countLabel"></span>
+        <button id="refreshBtn">רענון</button>
+      </div>
+      <div id="loadingMsg" class="loading hidden">טוען תורים...</div>
+      <div id="emptyMsg" class="msg info hidden">אין תורים קרובים.</div>
+      <table id="apptTable" class="hidden">
+        <thead>
+          <tr>
+            <th>תאריך</th>
+            <th>שעה</th>
+            <th>סוג</th>
+            <th>שם</th>
+            <th>טלפון</th>
+            <th>הערות</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="apptBody"></tbody>
+      </table>
+      <div id="actionMsg" class="msg hidden"></div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== הגדרה - חובה לערוך ====================
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzcRcAWsyU7ztS8iJPYzmYoTSUaCOXAJQcNWvlS9vBFCataOk9NyZBDa0Rq5y8Q9VxGUA/exec';
+
+    function callApi(params) {
+      return new Promise(function (resolve, reject) {
+        const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+        const timeout = setTimeout(function () {
+          cleanup();
+          reject(new Error('תם הזמן הקצוב לתקשורת עם השרת'));
+        }, 20000);
+
+        function cleanup() {
+          clearTimeout(timeout);
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+        }
+
+        window[cbName] = function (data) {
+          cleanup();
+          resolve(data);
+        };
+
+        const query = Object.keys(params)
+          .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); })
+          .join('&');
+
+        const script = document.createElement('script');
+        script.src = APPS_SCRIPT_URL + '?' + query + '&callback=' + cbName;
+        script.onerror = function () {
+          cleanup();
+          reject(new Error('שגיאת חיבור לשרת'));
+        };
+        document.body.appendChild(script);
+      });
+    }
+
+    let adminKey = sessionStorage.getItem('bookingAdminKey') || '';
+
+    const loginSection = document.getElementById('loginSection');
+    const dashboardSection = document.getElementById('dashboardSection');
+    const loginMsg = document.getElementById('loginMsg');
+    const loadingMsg = document.getElementById('loadingMsg');
+    const emptyMsg = document.getElementById('emptyMsg');
+    const apptTable = document.getElementById('apptTable');
+    const apptBody = document.getElementById('apptBody');
+    const countLabel = document.getElementById('countLabel');
+    const actionMsg = document.getElementById('actionMsg');
+
+    function showDashboard() {
+      loginSection.classList.add('hidden');
+      dashboardSection.classList.remove('hidden');
+      loadAppointments();
+    }
+
+    function loadAppointments() {
+      loadingMsg.classList.remove('hidden');
+      emptyMsg.classList.add('hidden');
+      apptTable.classList.add('hidden');
+      actionMsg.classList.add('hidden');
+
+      callApi({ action: 'listAppointments', key: adminKey, days: 60 })
+        .then(function (res) {
+          loadingMsg.classList.add('hidden');
+          if (res.error) {
+            if (res.error.indexOf('מורש') !== -1) {
+              sessionStorage.removeItem('bookingAdminKey');
+              loginSection.classList.remove('hidden');
+              dashboardSection.classList.add('hidden');
+              loginMsg.textContent = 'סיסמה שגויה';
+              loginMsg.classList.remove('hidden');
+              return;
+            }
+            emptyMsg.className = 'msg error';
+            emptyMsg.textContent = res.error;
+            emptyMsg.classList.remove('hidden');
+            return;
+          }
+          renderAppointments(res.appointments || []);
+        })
+        .catch(function (err) {
+          loadingMsg.classList.add('hidden');
+          emptyMsg.className = 'msg error';
+          emptyMsg.textContent = 'שגיאה: ' + err.message;
+          emptyMsg.classList.remove('hidden');
+        });
+    }
+
+    function renderAppointments(list) {
+      countLabel.textContent = list.length + ' תורים ב-60 הימים הקרובים';
+      if (list.length === 0) {
+        emptyMsg.className = 'msg info';
+        emptyMsg.textContent = 'אין תורים קרובים.';
+        emptyMsg.classList.remove('hidden');
+        return;
+      }
+      apptTable.classList.remove('hidden');
+      apptBody.innerHTML = '';
+      list.forEach(function (appt) {
+        const parts = appt.start.split(' ');
+        const dateStr = parts[0];
+        const timeStr = parts[1] || '';
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + dateStr + '</td>' +
+          '<td>' + timeStr + '</td>' +
+          '<td><span class="type-tag">' + appt.meetingType + '</span></td>' +
+          '<td>' + appt.name + '</td>' +
+          '<td>' + appt.phone + '</td>' +
+          '<td>' + (appt.notes || '') + '</td>' +
+          '<td></td>';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'danger';
+        cancelBtn.textContent = 'ביטול';
+        cancelBtn.addEventListener('click', function () {
+          if (!confirm('לבטל את התור של ' + appt.name + ' בתאריך ' + dateStr + '?')) return;
+          cancelBtn.disabled = true;
+          cancelBtn.textContent = 'מבטל...';
+          callApi({ action: 'cancelAppointment', eventId: appt.eventId })
+            .then(function (res) {
+              actionMsg.className = res.success ? 'msg success' : 'msg error';
+              actionMsg.textContent = res.message || res.error;
+              actionMsg.classList.remove('hidden');
+              if (res.success) {
+                tr.classList.add('cancelled');
+                cancelBtn.remove();
+              } else {
+                cancelBtn.disabled = false;
+                cancelBtn.textContent = 'ביטול';
+              }
+            })
+            .catch(function (err) {
+              actionMsg.className = 'msg error';
+              actionMsg.textContent = 'שגיאה: ' + err.message;
+              actionMsg.classList.remove('hidden');
+              cancelBtn.disabled = false;
+              cancelBtn.textContent = 'ביטול';
+            });
+        });
+        tr.lastChild.appendChild(cancelBtn);
+        apptBody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('loginBtn').addEventListener('click', function () {
+      const val = document.getElementById('adminKey').value.trim();
+      if (!val) return;
+      adminKey = val;
+      sessionStorage.setItem('bookingAdminKey', val);
+      loginMsg.classList.add('hidden');
+      showDashboard();
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', loadAppointments);
+
+    if (adminKey) {
+      showDashboard();
+    }
+  </script>
+</body>
+</html>
