@@ -27,6 +27,11 @@
       color: #1a1a1a;
       text-align: center;
     }
+    .logo {
+      display: block;
+      max-width: 110px;
+      margin: 0 auto 12px;
+    }
     label {
       display: block;
       margin-top: 16px;
@@ -143,6 +148,7 @@
 </head>
 <body>
   <div class="card" id="bookingCard">
+    <img class="logo" src="data:image/jpeg;base64,LOGO_BASE64_PLACEHOLDER" alt="עיריית אל-טירה">
     <h1>קביעת תור לפגישה</h1>
 
     <label>סוג פגישה</label>
@@ -219,8 +225,6 @@
         });
     }
 
-    // מנסה פעם ראשונה (30 שנ'), ואם נכשלה - מנסה שוב אוטומטית פעם אחת (35 שנ')
-    // לפני שמציגה שגיאה למשתמש. זה פותר את רוב מקרי ה"cold start" של Apps Script.
     function callApi(params) {
       return fetchOnce(params, 30000).catch(function () {
         return fetchOnce(params, 35000);
