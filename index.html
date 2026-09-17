@@ -35,7 +35,7 @@
       font-size: 14px;
       color: #333;
     }
-    input[type="text"], input[type="tel"], input[type="date"], textarea, select {
+    input[type="text"], input[type="tel"], input[type="email"], input[type="date"], textarea, select {
       width: 100%;
       padding: 10px;
       border: 1px solid #ccc;
@@ -109,12 +109,24 @@
       background: #9ca3af;
       cursor: not-allowed;
     }
+    button.cancel-link {
+      width: 100%;
+      margin-top: 10px;
+      padding: 12px;
+      background: #fff;
+      color: #991b1b;
+      border: 1px solid #991b1b;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+    }
     .loading { text-align: center; color: #888; padding: 10px; font-size: 14px; }
     .hidden { display: none; }
+    small.hint { color: #777; display: block; margin-top: 4px; font-size: 12px; }
   </style>
 </head>
 <body>
-  <div class="card">
+  <div class="card" id="bookingCard">
     <h1>קביעת תור לפגישה</h1>
 
     <label>סוג פגישה</label>
@@ -140,29 +152,37 @@
     <label for="phone">טלפון</label>
     <input type="tel" id="phone" placeholder="050-0000000">
 
+    <label for="email">אימייל (אופציונלי)</label>
+    <input type="email" id="email" placeholder="name@example.com">
+    <small class="hint">אם תזינו אימייל תקבלו הזמנה ותזכורת אוטומטית מגוגל קלנדר</small>
+
     <label for="notes">הערות (אופציונלי)</label>
     <textarea id="notes" rows="2" placeholder="פרטים נוספים..."></textarea>
 
     <button class="submit" id="submitBtn" disabled>קביעת תור</button>
 
     <div id="resultMsg" class="msg hidden"></div>
+    <button class="cancel-link hidden" id="cancelOwnBtn">ביטול התור הזה</button>
+  </div>
+
+  <div class="card hidden" id="cancelCard" style="margin-top:16px;">
+    <h1>ביטול תור</h1>
+    <div id="cancelMsg" class="msg info">האם לבטל את התור?</div>
+    <button class="cancel-link" id="confirmCancelBtn">כן, בטל את התור</button>
   </div>
 
   <script>
     // ==================== הגדרה - חובה לערוך ====================
-    // הדביקו כאן את כתובת ה-Web App מ-Apps Script (מסתיימת ב-/exec)
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzcRcAWsyU7ztS8iJPYzmYoTSUaCOXAJQcNWvlS9vBFCataOk9NyZBDa0Rq5y8Q9VxGUA/exec';
 
     // ==================== תקשורת JSONP עם Apps Script ====================
-    // נבחר JSONP (script tag) ולא fetch, כי זה עובד בכל דפדפן/טלפון
-    // בלי להיתקל בחסימות CORS או בבעיות דפדפן פנימי.
     function callApi(params) {
       return new Promise(function (resolve, reject) {
         const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
         const timeout = setTimeout(function () {
           cleanup();
           reject(new Error('תם הזמן הקצוב לתקשורת עם השרת'));
-        }, 15000);
+        }, 20000);
 
         function cleanup() {
           clearTimeout(timeout);
@@ -189,6 +209,38 @@
       });
     }
 
+    // ==================== מצב ביטול (מגיע מקישור עם ?cancel=EVENT_ID) ====================
+    const urlParams = new URLSearchParams(window.location.search);
+    const cancelId = urlParams.get('cancel');
+
+    if (cancelId) {
+      document.getElementById('bookingCard').classList.add('hidden');
+      const cancelCard = document.getElementById('cancelCard');
+      cancelCard.classList.remove('hidden');
+      document.getElementById('confirmCancelBtn').addEventListener('click', function () {
+        this.disabled = true;
+        this.textContent = 'מבטל...';
+        callApi({ action: 'cancelAppointment', eventId: cancelId })
+          .then(function (res) {
+            const msgEl = document.getElementById('cancelMsg');
+            document.getElementById('confirmCancelBtn').classList.add('hidden');
+            if (res.success) {
+              msgEl.className = 'msg success';
+              msgEl.textContent = res.message;
+            } else {
+              msgEl.className = 'msg error';
+              msgEl.textContent = res.message || res.error || 'שגיאה בביטול';
+            }
+          })
+          .catch(function (err) {
+            const msgEl = document.getElementById('cancelMsg');
+            msgEl.className = 'msg error';
+            msgEl.textContent = 'שגיאה: ' + err.message;
+          });
+      });
+    }
+
+    // ==================== טופס ההזמנה הרגיל ====================
     let selectedType = 'regular';
     let selectedTime = null;
 
@@ -201,6 +253,7 @@
     const submitBtn = document.getElementById('submitBtn');
     const resultMsg = document.getElementById('resultMsg');
     const typeNote = document.getElementById('type-note');
+    const cancelOwnBtn = document.getElementById('cancelOwnBtn');
 
     const today = new Date();
     dateInput.min = today.toISOString().split('T')[0];
@@ -293,6 +346,7 @@
         action: 'book',
         name: document.getElementById('name').value.trim(),
         phone: document.getElementById('phone').value.trim(),
+        email: document.getElementById('email').value.trim(),
         notes: document.getElementById('notes').value.trim(),
         meetingType: selectedType,
         date: dateInput.value,
@@ -307,6 +361,12 @@
             resultMsg.textContent = res.message;
             resultMsg.classList.remove('hidden');
             submitBtn.classList.add('hidden');
+            if (res.eventId) {
+              cancelOwnBtn.classList.remove('hidden');
+              cancelOwnBtn.onclick = function () {
+                window.location.href = window.location.pathname + '?cancel=' + encodeURIComponent(res.eventId);
+              };
+            }
           } else {
             resultMsg.className = 'msg error';
             resultMsg.textContent = res.message || res.error || 'שגיאה לא ידועה';
