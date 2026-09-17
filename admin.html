@@ -108,8 +108,11 @@
         <span id="countLabel"></span>
         <button id="refreshBtn">רענון</button>
       </div>
+      <label style="margin-top: 16px;">חיפוש לפי טלפון</label>
+      <input type="text" id="phoneFilter" placeholder="הקלידו מספר טלפון (או חלק ממנו)">
       <div id="loadingMsg" class="loading hidden">טוען תורים...</div>
       <div id="emptyMsg" class="msg info hidden">אין תורים קרובים.</div>
+      <div id="noMatchMsg" class="msg info hidden">לא נמצאו תורים עם הטלפון הזה.</div>
       <table id="apptTable" class="hidden">
         <thead>
           <tr>
@@ -211,15 +214,43 @@
         });
     }
 
+    let allAppointments = [];
+
     function renderAppointments(list) {
+      allAppointments = list;
       countLabel.textContent = list.length + ' תורים ב-60 הימים הקרובים';
-      if (list.length === 0) {
+      applyPhoneFilter();
+    }
+
+    function applyPhoneFilter() {
+      const filterVal = document.getElementById('phoneFilter').value.trim();
+      const filtered = filterVal
+        ? allAppointments.filter(function (a) { return (a.phone || '').indexOf(filterVal) !== -1; })
+        : allAppointments;
+
+      const noMatchMsg = document.getElementById('noMatchMsg');
+      noMatchMsg.classList.add('hidden');
+      emptyMsg.classList.add('hidden');
+
+      if (allAppointments.length === 0) {
         emptyMsg.className = 'msg info';
         emptyMsg.textContent = 'אין תורים קרובים.';
         emptyMsg.classList.remove('hidden');
+        apptTable.classList.add('hidden');
         return;
       }
+
+      if (filtered.length === 0) {
+        apptTable.classList.add('hidden');
+        noMatchMsg.classList.remove('hidden');
+        return;
+      }
+
       apptTable.classList.remove('hidden');
+      renderRows(filtered);
+    }
+
+    function renderRows(list) {
       apptBody.innerHTML = '';
       list.forEach(function (appt) {
         const parts = appt.start.split(' ');
@@ -250,6 +281,7 @@
               if (res.success) {
                 tr.classList.add('cancelled');
                 cancelBtn.remove();
+                appt.eventId = null;
               } else {
                 cancelBtn.disabled = false;
                 cancelBtn.textContent = 'ביטול';
@@ -278,6 +310,7 @@
     });
 
     document.getElementById('refreshBtn').addEventListener('click', loadAppointments);
+    document.getElementById('phoneFilter').addEventListener('input', applyPhoneFilter);
 
     if (adminKey) {
       showDashboard();
