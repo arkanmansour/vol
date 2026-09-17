@@ -132,36 +132,30 @@
     // ==================== הגדרה - חובה לערוך ====================
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzY6Sxue7GP034D3ljtIn-A3Xy8ngJyXSdf8_GSYc1hKJsPF4pOdyehFX1gcvxWnHkt8Q/exec';
 
-    function callApi(params) {
-      return new Promise(function (resolve, reject) {
-        const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
-        const timeout = setTimeout(function () {
-          cleanup();
-          reject(new Error('תם הזמן הקצוב לתקשורת עם השרת'));
-        }, 20000);
+    function fetchOnce(params, timeoutMs) {
+      const query = Object.keys(params)
+        .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); })
+        .join('&');
 
-        function cleanup() {
+      const controller = new AbortController();
+      const timeout = setTimeout(function () { controller.abort(); }, timeoutMs);
+
+      return fetch(APPS_SCRIPT_URL + '?' + query, { signal: controller.signal })
+        .then(function (res) {
           clearTimeout(timeout);
-          delete window[cbName];
-          if (script.parentNode) script.parentNode.removeChild(script);
-        }
+          if (!res.ok) throw new Error('שגיאת שרת: ' + res.status);
+          return res.json();
+        })
+        .catch(function (err) {
+          clearTimeout(timeout);
+          if (err.name === 'AbortError') throw new Error('תם הזמן הקצוב לתקשורת עם השרת');
+          throw new Error('שגיאת חיבור לשרת: ' + err.message);
+        });
+    }
 
-        window[cbName] = function (data) {
-          cleanup();
-          resolve(data);
-        };
-
-        const query = Object.keys(params)
-          .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); })
-          .join('&');
-
-        const script = document.createElement('script');
-        script.src = APPS_SCRIPT_URL + '?' + query + '&callback=' + cbName;
-        script.onerror = function () {
-          cleanup();
-          reject(new Error('שגיאת חיבור לשרת'));
-        };
-        document.body.appendChild(script);
+    function callApi(params) {
+      return fetchOnce(params, 30000).catch(function () {
+        return fetchOnce(params, 35000);
       });
     }
 
