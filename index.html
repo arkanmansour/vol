@@ -175,14 +175,14 @@
     // ==================== הגדרה - חובה לערוך ====================
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzY6Sxue7GP034D3ljtIn-A3Xy8ngJyXSdf8_GSYc1hKJsPF4pOdyehFX1gcvxWnHkt8Q/exec';
 
-    // ==================== תקשורת עם Apps Script (fetch רגיל) ====================
-    function callApi(params) {
+    // ==================== תקשורת עם Apps Script (fetch + ניסיון חוזר) ====================
+    function fetchOnce(params, timeoutMs) {
       const query = Object.keys(params)
         .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); })
         .join('&');
 
       const controller = new AbortController();
-      const timeout = setTimeout(function () { controller.abort(); }, 20000);
+      const timeout = setTimeout(function () { controller.abort(); }, timeoutMs);
 
       return fetch(APPS_SCRIPT_URL + '?' + query, { signal: controller.signal })
         .then(function (res) {
@@ -195,6 +195,14 @@
           if (err.name === 'AbortError') throw new Error('תם הזמן הקצוב לתקשורת עם השרת');
           throw new Error('שגיאת חיבור לשרת: ' + err.message);
         });
+    }
+
+    // מנסה פעם ראשונה (30 שנ'), ואם נכשלה - מנסה שוב אוטומטית פעם אחת (35 שנ')
+    // לפני שמציגה שגיאה למשתמש. זה פותר את רוב מקרי ה"cold start" של Apps Script.
+    function callApi(params) {
+      return fetchOnce(params, 30000).catch(function () {
+        return fetchOnce(params, 35000);
+      });
     }
 
     // ==================== מצב ביטול (מגיע מקישור עם ?cancel=EVENT_ID) ====================
