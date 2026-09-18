@@ -100,6 +100,73 @@
       background: #eef2ff;
       color: #3730a3;
     }
+    .card.secondary { margin-top: 16px; }
+    h2 {
+      font-size: 16px;
+      margin: 0 0 12px 0;
+      color: #1a1a1a;
+    }
+    label.field-label {
+      display: block;
+      font-size: 13px;
+      color: #444;
+      margin-top: 10px;
+      margin-bottom: 4px;
+    }
+    input[type="date"], input[type="time"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 15px;
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .checkbox-row input { width: auto; }
+    .time-range-row {
+      display: flex;
+      gap: 8px;
+    }
+    .time-range-row > div { flex: 1; }
+    button.secondary-btn {
+      background: #fff;
+      color: #2563eb;
+      border: 1px solid #2563eb;
+    }
+    button.danger.small {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    ul.blocks-list {
+      list-style: none;
+      margin: 14px 0 0 0;
+      padding: 0;
+    }
+    ul.blocks-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid #eee;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      background: #fafafa;
+      font-size: 13px;
+    }
+    .block-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      background: #fee2e2;
+      color: #991b1b;
+      margin-inline-end: 6px;
+    }
   </style>
 </head>
 <body>
@@ -148,6 +215,41 @@
     </div>
   </div>
 
+  <div class="card secondary hidden" id="blocksSection">
+    <h2>חסימת ימים / שעות (חופשות)</h2>
+
+    <label class="field-label" for="blockDate">תאריך</label>
+    <input type="date" id="blockDate">
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="blockAllDay" checked>
+      <label for="blockAllDay">חסימת יום שלם</label>
+    </div>
+
+    <div id="blockTimeRow" class="time-range-row hidden">
+      <div>
+        <label class="field-label" for="blockStart">משעה</label>
+        <input type="time" id="blockStart">
+      </div>
+      <div>
+        <label class="field-label" for="blockEnd">עד שעה</label>
+        <input type="time" id="blockEnd">
+      </div>
+    </div>
+
+    <label class="field-label" for="blockNote">הערה (אופציונלי, לשימושכם בלבד)</label>
+    <input type="text" id="blockNote" placeholder="לדוגמה: חופשה, כנס...">
+
+    <div class="row">
+      <button id="addBlockBtn" class="secondary-btn">הוספת חסימה</button>
+    </div>
+    <div id="blockActionMsg" class="msg hidden"></div>
+
+    <div id="blocksLoading" class="loading hidden">טוען חסימות...</div>
+    <div id="blocksEmptyMsg" class="msg info hidden">אין חסימות מוגדרות כרגע.</div>
+    <ul class="blocks-list hidden" id="blocksList"></ul>
+  </div>
+
   <script>
     // ==================== הגדרה - חובה לערוך ====================
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzY6Sxue7GP034D3ljtIn-A3Xy8ngJyXSdf8_GSYc1hKJsPF4pOdyehFX1gcvxWnHkt8Q/exec';
@@ -190,11 +292,14 @@
     const apptBody = document.getElementById('apptBody');
     const countLabel = document.getElementById('countLabel');
     const actionMsg = document.getElementById('actionMsg');
+    const blocksSection = document.getElementById('blocksSection');
 
     function showDashboard() {
       loginSection.classList.add('hidden');
       dashboardSection.classList.remove('hidden');
+      blocksSection.classList.remove('hidden');
       loadAppointments();
+      loadBlocks();
     }
 
     function loadAppointments() {
@@ -327,6 +432,173 @@
 
     document.getElementById('refreshBtn').addEventListener('click', loadAppointments);
     document.getElementById('phoneFilter').addEventListener('input', applyPhoneFilter);
+
+    // ==================== חסימת ימים/שעות (חופשות) ====================
+    const blockDateInput = document.getElementById('blockDate');
+    const blockAllDayCheckbox = document.getElementById('blockAllDay');
+    const blockTimeRow = document.getElementById('blockTimeRow');
+    const blockStartInput = document.getElementById('blockStart');
+    const blockEndInput = document.getElementById('blockEnd');
+    const blockNoteInput = document.getElementById('blockNote');
+    const addBlockBtn = document.getElementById('addBlockBtn');
+    const blockActionMsg = document.getElementById('blockActionMsg');
+    const blocksLoading = document.getElementById('blocksLoading');
+    const blocksEmptyMsg = document.getElementById('blocksEmptyMsg');
+    const blocksList = document.getElementById('blocksList');
+
+    const todayForBlocks = new Date();
+    blockDateInput.min = todayForBlocks.toISOString().split('T')[0];
+
+    blockAllDayCheckbox.addEventListener('change', function () {
+      blockTimeRow.classList.toggle('hidden', blockAllDayCheckbox.checked);
+    });
+
+    function dayLabelHe(dateStr) {
+      const names = ['יום א׳', 'יום ב׳', 'יום ג׳', 'יום ד׳', 'יום ה׳', 'יום ו׳', 'שבת'];
+      const d = new Date(dateStr + 'T00:00:00');
+      return names[d.getDay()];
+    }
+
+    function loadBlocks() {
+      blocksLoading.classList.remove('hidden');
+      blocksEmptyMsg.classList.add('hidden');
+      blocksList.classList.add('hidden');
+      blockActionMsg.classList.add('hidden');
+
+      callApi({ action: 'listBlocks', key: adminKey })
+        .then(function (res) {
+          blocksLoading.classList.add('hidden');
+          if (res.error) {
+            blocksEmptyMsg.className = 'msg error';
+            blocksEmptyMsg.textContent = res.error;
+            blocksEmptyMsg.classList.remove('hidden');
+            return;
+          }
+          renderBlocks(res.blocks || []);
+        })
+        .catch(function (err) {
+          blocksLoading.classList.add('hidden');
+          blocksEmptyMsg.className = 'msg error';
+          blocksEmptyMsg.textContent = 'שגיאה: ' + err.message;
+          blocksEmptyMsg.classList.remove('hidden');
+        });
+    }
+
+    function renderBlocks(list) {
+      if (list.length === 0) {
+        blocksEmptyMsg.className = 'msg info';
+        blocksEmptyMsg.textContent = 'אין חסימות מוגדרות כרגע.';
+        blocksEmptyMsg.classList.remove('hidden');
+        blocksList.classList.add('hidden');
+        return;
+      }
+
+      blocksEmptyMsg.classList.add('hidden');
+      blocksList.classList.remove('hidden');
+      blocksList.innerHTML = '';
+
+      list.forEach(function (block) {
+        const li = document.createElement('li');
+
+        const info = document.createElement('span');
+        const tag = document.createElement('span');
+        tag.className = 'block-tag';
+        tag.textContent = block.allDay ? 'יום שלם' : (block.start + '-' + block.end);
+        info.appendChild(tag);
+        info.appendChild(document.createTextNode(
+          dayLabelHe(block.date) + ' ' + block.date + (block.note ? (' - ' + block.note) : '')
+        ));
+        li.appendChild(info);
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'danger small';
+        delBtn.textContent = 'מחיקה';
+        delBtn.addEventListener('click', function () {
+          if (!confirm('למחוק את החסימה הזו?')) return;
+          delBtn.disabled = true;
+          callApi({ action: 'removeBlock', key: adminKey, id: block.id })
+            .then(function (res) {
+              blockActionMsg.className = res.success ? 'msg success' : 'msg error';
+              blockActionMsg.textContent = res.success ? 'החסימה נמחקה' : (res.error || 'שגיאה במחיקה');
+              blockActionMsg.classList.remove('hidden');
+              if (res.success) {
+                li.remove();
+                if (blocksList.children.length === 0) {
+                  renderBlocks([]);
+                }
+              } else {
+                delBtn.disabled = false;
+              }
+            })
+            .catch(function (err) {
+              blockActionMsg.className = 'msg error';
+              blockActionMsg.textContent = 'שגיאה: ' + err.message;
+              blockActionMsg.classList.remove('hidden');
+              delBtn.disabled = false;
+            });
+        });
+        li.appendChild(delBtn);
+
+        blocksList.appendChild(li);
+      });
+    }
+
+    addBlockBtn.addEventListener('click', function () {
+      const date = blockDateInput.value;
+      const allDay = blockAllDayCheckbox.checked;
+      const start = blockStartInput.value;
+      const end = blockEndInput.value;
+      const note = blockNoteInput.value.trim();
+
+      blockActionMsg.classList.add('hidden');
+
+      if (!date) {
+        blockActionMsg.className = 'msg error';
+        blockActionMsg.textContent = 'נא לבחור תאריך';
+        blockActionMsg.classList.remove('hidden');
+        return;
+      }
+      if (!allDay && (!start || !end)) {
+        blockActionMsg.className = 'msg error';
+        blockActionMsg.textContent = 'נא להזין שעת התחלה ושעת סיום, או לסמן חסימת יום שלם';
+        blockActionMsg.classList.remove('hidden');
+        return;
+      }
+
+      addBlockBtn.disabled = true;
+      addBlockBtn.textContent = 'מוסיף...';
+
+      callApi({
+        action: 'addBlock',
+        key: adminKey,
+        date: date,
+        allDay: allDay ? '1' : '0',
+        start: allDay ? '' : start,
+        end: allDay ? '' : end,
+        note: note
+      })
+        .then(function (res) {
+          addBlockBtn.disabled = false;
+          addBlockBtn.textContent = 'הוספת חסימה';
+          blockActionMsg.className = res.success ? 'msg success' : 'msg error';
+          blockActionMsg.textContent = res.success ? 'החסימה נוספה בהצלחה' : (res.error || 'שגיאה בהוספה');
+          blockActionMsg.classList.remove('hidden');
+          if (res.success) {
+            blockDateInput.value = '';
+            blockNoteInput.value = '';
+            blockStartInput.value = '';
+            blockEndInput.value = '';
+            loadBlocks();
+          }
+        })
+        .catch(function (err) {
+          addBlockBtn.disabled = false;
+          addBlockBtn.textContent = 'הוספת חסימה';
+          blockActionMsg.className = 'msg error';
+          blockActionMsg.textContent = 'שגיאה: ' + err.message;
+          blockActionMsg.classList.remove('hidden');
+        });
+    });
 
     if (adminKey) {
       showDashboard();
