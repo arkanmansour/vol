@@ -69,6 +69,8 @@ const MESSAGES = {
     cancelError: function (err) { return 'שגיאה בביטול התור: ' + err; },
     unrecognizedAction: function (action) { return 'פעולה לא מוכרת: ' + action; },
     missingPhone: 'נא להזין מספר טלפון',
+    rescheduleSuccess: function (date, time) { return 'מועד התור עודכן בהצלחה ל-' + date + ' בשעה ' + time; },
+    rescheduleError: function (err) { return 'שגיאה בשינוי מועד התור: ' + err; },
     tooManyAttempts: 'הגעת למספר המרבי של קביעות תורים להיום עבור מספר טלפון זה. נא לנסות שוב מחר או ליצור קשר טלפוני.'
   },
   ar: {
@@ -84,6 +86,8 @@ const MESSAGES = {
     cancelError: function (err) { return 'خطأ في إلغاء الموعد: ' + err; },
     unrecognizedAction: function (action) { return 'إجراء غير معروف: ' + action; },
     missingPhone: 'الرجاء إدخال رقم الهاتف',
+    rescheduleSuccess: function (date, time) { return 'تم تحديث موعد اللقاء بنجاح ليوم ' + date + ' الساعة ' + time; },
+    rescheduleError: function (err) { return 'خطأ في تغيير موعد اللقاء: ' + err; },
     tooManyAttempts: 'لقد وصلت إلى الحد الأقصى لعدد الحجوزات لهذا اليوم لهذا الرقم. الرجاء المحاولة غدًا أو التواصل هاتفيًا.'
   }
 };
@@ -103,7 +107,7 @@ function doGet(e) {
 
   try {
     if (action === 'getSlots') {
-      result = getAvailableSlots(e.parameter.date, e.parameter.meetingType, lang);
+      result = getAvailableSlots(e.parameter.date, e.parameter.meetingType, lang, e.parameter.excludeEventId || null);
     } else if (action === 'book') {
       result = bookAppointment({
         name: e.parameter.name,
@@ -119,6 +123,8 @@ function doGet(e) {
       }, lang);
     } else if (action === 'cancelAppointment') {
       result = cancelAppointment(e.parameter.eventId, lang);
+    } else if (action === 'rescheduleAppointment') {
+      result = rescheduleAppointment(e.parameter.eventId, e.parameter.date, e.parameter.time, lang);
     } else if (action === 'listAppointments') {
       result = listAppointments(e.parameter.key, Number(e.parameter.days) || 30);
     } else if (action === 'getStats') {
@@ -171,7 +177,7 @@ function getHoursMapForType(meetingType) {
 }
 
 // ==================== חישוב זמינות ====================
-function getAvailableSlots(dateStr, meetingType, lang) {
+function getAvailableSlots(dateStr, meetingType, lang, excludeEventId) {
   const msgs = getMessages(lang);
   const hoursMap = getHoursMapForType(meetingType);
   if (!hoursMap) return { error: msgs.invalidMeetingType };
@@ -206,9 +212,9 @@ function getAvailableSlots(dateStr, meetingType, lang) {
   dayEnd.setHours(23, 59, 59, 999);
   const existingEvents = calendar.getEvents(dayStart, dayEnd);
 
-  const busyRanges = existingEvents.map(function (ev) {
-    return { start: ev.getStartTime(), end: ev.getEndTime() };
-  });
+  const busyRanges = existingEvents
+    .filter(function (ev) { return !excludeEventId || ev.getId() !== excludeEventId; })
+    .map(function (ev) { return { start: ev.getStartTime(), end: ev.getEndTime() }; });
 
   const blockRanges = dateBlocks
     .filter(function (b) { return !b.allDay && b.start && b.end; })
@@ -439,6 +445,65 @@ function cancelAppointment(eventId, lang) {
   }
 }
 
+// ==================== שינוי מועד תור קיים (ללא ביטול + קביעה מחדש) ====================
+/**
+ * מאפשר למשתמש בדף הציבורי (לפי אותו זרימת חיפוש-לפי-טלפון) להזיז תור קיים למועד אחר,
+ * מבלי לבטל וליצור תור חדש - כך נשמר אותו eventId ואותם שם/טלפון/אימייל/הערות בתיאור.
+ * בודק זמינות במועד החדש (כולל חסימות וימי קבלה) לפי אותו סוג פגישה כמו התור המקורי.
+ */
+function rescheduleAppointment(eventId, newDate, newTime, lang) {
+  const msgs = getMessages(lang);
+  if (!eventId || !newDate || !newTime) {
+    return { success: false, message: msgs.missingFields };
+  }
+  try {
+    const calendar = CalendarApp.getCalendarById(CONFIG.CALENDAR_ID);
+    const event = calendar.getEventById(eventId);
+    if (!event) {
+      return { success: false, message: msgs.eventNotFound };
+    }
+    const desc = event.getDescription() || '';
+    if (desc.indexOf(CONFIG.SYSTEM_TAG) === -1) {
+      return { success: false, message: msgs.cannotCancel };
+    }
+
+    const meetingType = typeKeyFromLabel(extractLabel(desc, 'סוג פגישה'));
+    const oldStart = event.getStartTime();
+    const oldStartFormatted = Utilities.formatDate(oldStart, CONFIG.TIMEZONE, 'dd/MM/yyyy HH:mm');
+
+    // excludeEventId=eventId: אם המועד החדש הוא אותו תאריך של התור הקיים, האירוע עצמו לא
+    // ייחשב "תפוס" ברשימת האירועים התפוסים - כדי שלא ייחסם מעבר בין שעות באותו יום.
+    const availability = getAvailableSlots(newDate, meetingType, lang, eventId);
+    const slotsAvailable = availability.slots || [];
+    if (slotsAvailable.indexOf(newTime) === -1) {
+      return { success: false, message: msgs.slotTaken };
+    }
+
+    const timeParts = newTime.split(':').map(Number);
+    const newStart = new Date(newDate + 'T00:00:00');
+    newStart.setHours(timeParts[0], timeParts[1], 0, 0);
+    const newEnd = new Date(newStart.getTime() + CONFIG.MEETING_DURATION_MINUTES * 60000);
+
+    event.setTime(newStart, newEnd);
+
+    notifyAdmin(
+      'מועד תור שונה: ' + event.getTitle(),
+      'מועד תור שונה:\n\n' +
+      event.getTitle() + '\n' +
+      'מועד קודם: ' + oldStartFormatted + '\n' +
+      'מועד חדש: ' + newDate + ' ' + newTime
+    );
+
+    return {
+      success: true,
+      message: msgs.rescheduleSuccess(newDate, newTime),
+      eventId: event.getId()
+    };
+  } catch (err) {
+    return { success: false, message: msgs.rescheduleError(err.message) };
+  }
+}
+
 // ==================== חיפוש תורים לפי טלפון (לביטול עצמי מהדף הציבורי) ====================
 /**
  * מאפשר למשתמש בדף הציבורי למצוא ולבטל תור קיים לפי מספר הטלפון שהזין בעת הקביעה,
@@ -449,6 +514,27 @@ function cancelAppointment(eventId, lang) {
  */
 function normalizePhoneDigits(p) {
   return (p || '').replace(/\D/g, '');
+}
+
+/** עזרי פירוש תיאור אירוע - משותפים בין findAppointmentsByPhone, rescheduleAppointment, listAppointments, getStats */
+function extractLabel(desc, label) {
+  const re = new RegExp(label + ':\\s*(.*)');
+  const m = desc.match(re);
+  return m ? m[1].trim() : '';
+}
+
+function typeKeyFromLabel(label) {
+  for (const key in CONFIG.MEETING_TYPES) {
+    if (CONFIG.MEETING_TYPES[key].label === label) return key;
+  }
+  return 'regular';
+}
+
+function formatKeyFromLabel(label) {
+  for (const key in CONFIG.FORMAT_LABELS) {
+    if (CONFIG.FORMAT_LABELS[key] === label) return key;
+  }
+  return 'inperson';
 }
 
 function findAppointmentsByPhone(phone, lang) {
@@ -463,31 +549,11 @@ function findAppointmentsByPhone(phone, lang) {
     const rangeEnd = new Date(now.getTime() + 120 * 24 * 60 * 60 * 1000);
     const events = calendar.getEvents(now, rangeEnd);
 
-    function extract(desc, label) {
-      const re = new RegExp(label + ':\\s*(.*)');
-      const m = desc.match(re);
-      return m ? m[1].trim() : '';
-    }
-
-    function typeKeyFromLabel(label) {
-      for (const key in CONFIG.MEETING_TYPES) {
-        if (CONFIG.MEETING_TYPES[key].label === label) return key;
-      }
-      return 'regular';
-    }
-
-    function formatKeyFromLabel(label) {
-      for (const key in CONFIG.FORMAT_LABELS) {
-        if (CONFIG.FORMAT_LABELS[key] === label) return key;
-      }
-      return 'inperson';
-    }
-
     const appointments = events
       .filter(function (ev) {
         const desc = ev.getDescription() || '';
         if (desc.indexOf(CONFIG.SYSTEM_TAG) === -1) return false;
-        const evPhone = normalizePhoneDigits(extract(desc, 'טלפון'));
+        const evPhone = normalizePhoneDigits(extractLabel(desc, 'טלפון'));
         return evPhone && evPhone === normalized;
       })
       .map(function (ev) {
@@ -497,8 +563,8 @@ function findAppointmentsByPhone(phone, lang) {
           eventId: ev.getId(),
           date: Utilities.formatDate(start, CONFIG.TIMEZONE, 'yyyy-MM-dd'),
           time: Utilities.formatDate(start, CONFIG.TIMEZONE, 'HH:mm'),
-          typeKey: typeKeyFromLabel(extract(desc, 'סוג פגישה')),
-          formatKey: formatKeyFromLabel(extract(desc, 'אופן הפגישה'))
+          typeKey: typeKeyFromLabel(extractLabel(desc, 'סוג פגישה')),
+          formatKey: formatKeyFromLabel(extractLabel(desc, 'אופן הפגישה'))
         };
       })
       .sort(function (a, b) { return (a.date + a.time).localeCompare(b.date + b.time); });

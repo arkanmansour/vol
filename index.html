@@ -206,12 +206,37 @@
     }
     .appt-row .appt-info { font-size: 14px; color: #1a1a1a; line-height: 1.5; }
     .appt-row .appt-info strong { font-size: 15px; }
-    .appt-row button.cancel-link {
+    .appt-btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .appt-row button.cancel-link,
+    .appt-row button.search-btn {
       width: auto;
       margin-top: 0;
       padding: 8px 14px;
       font-size: 13px;
       white-space: nowrap;
+    }
+    .field-error {
+      color: #991b1b;
+      font-size: 12px;
+      margin-top: 4px;
+      display: block;
+    }
+    a.calendar-link {
+      display: block;
+      text-align: center;
+      margin-top: 10px;
+      padding: 12px;
+      background: #fff;
+      color: #2563eb;
+      border: 1px solid #2563eb;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      text-decoration: none;
     }
     .whatsapp-link {
       max-width: 480px;
@@ -296,6 +321,7 @@
 
     <label for="phone" id="t_phoneLabel">الهاتف</label>
     <input type="tel" id="phone" placeholder="050-0000000">
+    <small class="field-error hidden" id="phoneError"></small>
 
     <label for="email" id="t_emailLabel">البريد الإلكتروني (اختياري)</label>
     <input type="email" id="email" placeholder="name@example.com">
@@ -313,6 +339,7 @@
     <button class="submit" id="submitBtn" disabled>حجز الموعد</button>
 
     <div id="resultMsg" class="msg hidden"></div>
+    <a href="#" id="calendarLink" class="calendar-link hidden" download="appointment.ics">إضافة إلى التقويم</a>
     <button class="cancel-link hidden" id="cancelOwnBtn">إلغاء هذا الموعد</button>
   </div>
 
@@ -328,11 +355,31 @@
 
     <label for="searchPhone" id="t_searchPhoneLabel">الهاتف</label>
     <input type="tel" id="searchPhone" placeholder="050-0000000">
+    <small class="field-error hidden" id="searchPhoneError"></small>
 
     <button class="search-btn" id="searchPhoneBtn">بحث عن المواعيد</button>
 
     <div id="searchResultsMsg" class="msg hidden"></div>
     <div id="appointmentsList" class="appt-list"></div>
+  </div>
+
+  <div class="card hidden" id="rescheduleCard" style="margin-top:16px;">
+    <h1 id="t_rescheduleTitle">تغيير موعد اللقاء</h1>
+    <div id="rescheduleCurrentInfo" class="msg info"></div>
+
+    <label for="rescheduleDate" id="t_rescheduleDateLabel">التاريخ الجديد</label>
+    <input type="date" id="rescheduleDate">
+
+    <div id="reschedule-slots-container" class="hidden">
+      <label id="t_rescheduleSlotsLabel">مواعيد متاحة</label>
+      <div id="reschedule-slots-loading" class="loading hidden">جاري تحميل المواعيد المتاحة...</div>
+      <div id="reschedule-slots-grid" class="slots-grid"></div>
+      <div id="reschedule-slots-empty" class="msg info hidden"></div>
+    </div>
+
+    <div id="rescheduleMsg" class="msg hidden"></div>
+    <button class="submit" id="confirmRescheduleBtn" disabled>تأكيد تغيير الموعد</button>
+    <button class="cancel-link" id="cancelRescheduleBtn">تراجع</button>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -392,7 +439,20 @@
         receptionHoursPrefix: 'أيام وساعات استقبال الجمهور لهذا النوع من اللقاءات:',
         noHoursDefined: 'لا توجد حاليًا أيام استقبال محددة لهذا النوع من اللقاءات.',
         dayNames: ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'],
-        whatsappContact: 'تواصل معنا عبر واتساب'
+        whatsappContact: 'تواصل معنا عبر واتساب',
+        invalidPhone: 'رقم هاتف غير صالح. الرجاء إدخال رقم هاتف إسرائيلي صحيح (مثال: 050-1234567)',
+        addToCalendar: 'أضف إلى التقويم',
+        rescheduleThisAppointment: 'تغيير الموعد',
+        rescheduleTitle: 'تغيير موعد اللقاء',
+        rescheduleDateLabel: 'التاريخ الجديد',
+        rescheduleSlotsLabel: 'مواعيد متاحة',
+        rescheduleCurrentInfo: 'الموعد الحالي: ',
+        rescheduleConfirmBtn: 'تأكيد تغيير الموعد',
+        rescheduleCancelBtn: 'تراجع',
+        rescheduling: 'جاري تحديث الموعد...',
+        rescheduleGenericError: 'خطأ في تغيير الموعد',
+        pickNewSlot: 'الرجاء اختيار تاريخ ووقت جديدين',
+        calendarEventTitle: 'موعد لقاء مع منسقة التطوع - بلدية الطيرة'
       },
       he: {
         pageTitle: 'קביעת תור',
@@ -439,7 +499,20 @@
         receptionHoursPrefix: 'ימי ושעות קבלת קהל עבור סוג פגישה זה:',
         noHoursDefined: 'כרגע אין ימי קבלה מוגדרים לסוג פגישה זה.',
         dayNames: ['יום א׳', 'יום ב׳', 'יום ג׳', 'יום ד׳', 'יום ה׳', 'יום ו׳', 'שבת'],
-        whatsappContact: 'יצירת קשר בוואטסאפ'
+        whatsappContact: 'יצירת קשר בוואטסאפ',
+        invalidPhone: 'מספר טלפון לא תקין. נא להזין מספר טלפון ישראלי תקין (לדוגמה: 050-1234567)',
+        addToCalendar: 'הוספה ליומן',
+        rescheduleThisAppointment: 'שינוי מועד',
+        rescheduleTitle: 'שינוי מועד הפגישה',
+        rescheduleDateLabel: 'תאריך חדש',
+        rescheduleSlotsLabel: 'שעות פנויות',
+        rescheduleCurrentInfo: 'המועד הנוכחי: ',
+        rescheduleConfirmBtn: 'אישור שינוי מועד',
+        rescheduleCancelBtn: 'ביטול',
+        rescheduling: 'מעדכן מועד...',
+        rescheduleGenericError: 'שגיאה בשינוי מועד',
+        pickNewSlot: 'נא לבחור תאריך ושעה חדשים',
+        calendarEventTitle: 'פגישה עם רכזת ההתנדבות - עיריית טירה'
       }
     };
 
@@ -477,6 +550,10 @@
       document.getElementById('notes').placeholder = t('notesPlaceholder');
       submitBtn.textContent = t('submitBtn');
       document.getElementById('cancelOwnBtn').textContent = t('cancelOwn');
+      const calendarLinkEl = document.getElementById('calendarLink');
+      if (!calendarLinkEl.classList.contains('hidden')) {
+        calendarLinkEl.textContent = t('addToCalendar');
+      }
       document.getElementById('t_cancelTitle').textContent = t('cancelTitle');
       document.getElementById('confirmCancelBtn').textContent = t('cancelConfirmBtn');
       if (!currentCancelEventId) {
@@ -486,6 +563,16 @@
       document.getElementById('t_cancelByPhoneHint').textContent = t('cancelByPhoneHint');
       document.getElementById('t_searchPhoneLabel').textContent = t('searchPhoneLabel');
       document.getElementById('searchPhoneBtn').textContent = t('searchBtn');
+      document.getElementById('t_rescheduleTitle').textContent = t('rescheduleTitle');
+      document.getElementById('t_rescheduleDateLabel').textContent = t('rescheduleDateLabel');
+      document.getElementById('t_rescheduleSlotsLabel').textContent = t('rescheduleSlotsLabel');
+      document.getElementById('reschedule-slots-loading').textContent = t('slotsLoading');
+      document.getElementById('confirmRescheduleBtn').textContent = t('rescheduleConfirmBtn');
+      document.getElementById('cancelRescheduleBtn').textContent = t('rescheduleCancelBtn');
+      if (currentRescheduleAppt) {
+        document.getElementById('rescheduleCurrentInfo').textContent =
+          t('rescheduleCurrentInfo') + currentRescheduleAppt.date + ' • ' + currentRescheduleAppt.time;
+      }
       renderAppointmentsList();
       renderHoursInfo();
       if (fp) {
@@ -592,6 +679,7 @@
     const searchResultsMsg = document.getElementById('searchResultsMsg');
     const appointmentsList = document.getElementById('appointmentsList');
     let lastFoundAppointments = [];
+    let currentRescheduleAppt = null;
 
     function renderAppointmentsList() {
       appointmentsList.innerHTML = '';
@@ -608,17 +696,36 @@
         info.appendChild(document.createTextNode(t(apt.typeKey) + ' (' + t(apt.formatKey) + ')'));
         row.appendChild(info);
 
+        const btnRow = document.createElement('div');
+        btnRow.className = 'appt-btn-row';
+
+        const rescheduleBtn = document.createElement('button');
+        rescheduleBtn.className = 'search-btn';
+        rescheduleBtn.textContent = t('rescheduleThisAppointment');
+        rescheduleBtn.addEventListener('click', function () {
+          showRescheduleUI(apt);
+        });
+        btnRow.appendChild(rescheduleBtn);
+
         const cancelBtn = document.createElement('button');
         cancelBtn.className = 'cancel-link';
         cancelBtn.textContent = t('cancelThisAppointment');
         cancelBtn.addEventListener('click', function () {
           showCancelConfirmation(apt.eventId, true);
         });
-        row.appendChild(cancelBtn);
+        btnRow.appendChild(cancelBtn);
 
+        row.appendChild(btnRow);
         appointmentsList.appendChild(row);
       });
     }
+
+    const searchPhoneErrorEl = document.getElementById('searchPhoneError');
+    searchPhoneInput.addEventListener('input', function () {
+      const valid = !searchPhoneInput.value.trim() || isValidIsraeliPhone(searchPhoneInput.value.trim());
+      searchPhoneErrorEl.textContent = t('invalidPhone');
+      searchPhoneErrorEl.classList.toggle('hidden', valid);
+    });
 
     searchPhoneBtn.addEventListener('click', function () {
       const phone = searchPhoneInput.value.trim();
@@ -629,6 +736,12 @@
       if (!phone) {
         searchResultsMsg.className = 'msg error';
         searchResultsMsg.textContent = t('missingSearchPhone');
+        searchResultsMsg.classList.remove('hidden');
+        return;
+      }
+      if (!isValidIsraeliPhone(phone)) {
+        searchResultsMsg.className = 'msg error';
+        searchResultsMsg.textContent = t('invalidPhone');
         searchResultsMsg.classList.remove('hidden');
         return;
       }
@@ -664,6 +777,158 @@
         });
     });
 
+    // ==================== שינוי מועד תור קיים ====================
+    const rescheduleCard = document.getElementById('rescheduleCard');
+    const rescheduleDateInput = document.getElementById('rescheduleDate');
+    const rescheduleSlotsContainer = document.getElementById('reschedule-slots-container');
+    const rescheduleSlotsGrid = document.getElementById('reschedule-slots-grid');
+    const rescheduleSlotsLoading = document.getElementById('reschedule-slots-loading');
+    const rescheduleSlotsEmpty = document.getElementById('reschedule-slots-empty');
+    const rescheduleMsgEl = document.getElementById('rescheduleMsg');
+    const confirmRescheduleBtn = document.getElementById('confirmRescheduleBtn');
+    const cancelRescheduleBtn = document.getElementById('cancelRescheduleBtn');
+    let rescheduleSelectedTime = null;
+    let fpReschedule = null;
+
+    function showRescheduleUI(apt) {
+      currentRescheduleAppt = apt;
+      rescheduleSelectedTime = null;
+      document.getElementById('bookingCard').classList.add('hidden');
+      document.getElementById('cancelByPhoneCard').classList.add('hidden');
+      cancelCard.classList.add('hidden');
+      rescheduleCard.classList.remove('hidden');
+      rescheduleMsgEl.classList.add('hidden');
+      confirmRescheduleBtn.disabled = true;
+      confirmRescheduleBtn.classList.remove('hidden');
+      confirmRescheduleBtn.textContent = t('rescheduleConfirmBtn');
+      rescheduleDateInput.value = '';
+      rescheduleSlotsContainer.classList.add('hidden');
+      rescheduleSlotsGrid.innerHTML = '';
+      document.getElementById('rescheduleCurrentInfo').textContent =
+        t('rescheduleCurrentInfo') + apt.date + ' • ' + apt.time;
+
+      const hoursMap = hoursMapForType(apt.typeKey);
+      if (typeof flatpickr !== 'undefined') {
+        if (fpReschedule) {
+          fpReschedule.set('disable', buildDisableRulesForHours(hoursMap));
+          fpReschedule.clear();
+        } else {
+          fpReschedule = flatpickr(rescheduleDateInput, {
+            minDate: 'today',
+            dateFormat: 'Y-m-d',
+            disable: buildDisableRulesForHours(hoursMap),
+            locale: currentLang === 'he' ? 'he' : 'ar',
+            onChange: function (selectedDates, dateStr) {
+              rescheduleSelectedTime = null;
+              confirmRescheduleBtn.disabled = true;
+              if (dateStr) loadRescheduleSlots();
+            }
+          });
+        }
+      }
+      rescheduleCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function loadRescheduleSlots() {
+      rescheduleSlotsContainer.classList.remove('hidden');
+      rescheduleSlotsGrid.innerHTML = '';
+      rescheduleSlotsEmpty.classList.add('hidden');
+      rescheduleSlotsLoading.textContent = t('slotsLoading');
+      rescheduleSlotsLoading.classList.remove('hidden');
+
+      callApi({
+        action: 'getSlots',
+        date: rescheduleDateInput.value,
+        meetingType: currentRescheduleAppt.typeKey,
+        excludeEventId: currentRescheduleAppt.eventId
+      })
+        .then(function (res) {
+          rescheduleSlotsLoading.classList.add('hidden');
+          if (res.error) {
+            rescheduleSlotsEmpty.className = 'msg error';
+            rescheduleSlotsEmpty.textContent = res.error;
+            rescheduleSlotsEmpty.classList.remove('hidden');
+            return;
+          }
+          if (!res.slots || res.slots.length === 0) {
+            rescheduleSlotsEmpty.className = 'msg info';
+            rescheduleSlotsEmpty.textContent = (res.reason === 'no_reception_day' || res.reason === 'blocked_day')
+              ? t('noReception')
+              : t('noSlots');
+            rescheduleSlotsEmpty.classList.remove('hidden');
+            return;
+          }
+          res.slots.forEach(function (slot) {
+            const btn = document.createElement('div');
+            btn.className = 'slot-btn';
+            btn.textContent = slot;
+            btn.addEventListener('click', function () {
+              rescheduleSlotsGrid.querySelectorAll('.slot-btn').forEach(function (b) {
+                b.classList.remove('selected');
+              });
+              btn.classList.add('selected');
+              rescheduleSelectedTime = slot;
+              confirmRescheduleBtn.disabled = false;
+            });
+            rescheduleSlotsGrid.appendChild(btn);
+          });
+        })
+        .catch(function (err) {
+          rescheduleSlotsLoading.classList.add('hidden');
+          rescheduleSlotsEmpty.className = 'msg error';
+          rescheduleSlotsEmpty.textContent = t('loadSlotsError') + err.message;
+          rescheduleSlotsEmpty.classList.remove('hidden');
+        });
+    }
+
+    confirmRescheduleBtn.addEventListener('click', function () {
+      if (!currentRescheduleAppt || !rescheduleDateInput.value || !rescheduleSelectedTime) {
+        rescheduleMsgEl.className = 'msg error';
+        rescheduleMsgEl.textContent = t('pickNewSlot');
+        rescheduleMsgEl.classList.remove('hidden');
+        return;
+      }
+      confirmRescheduleBtn.disabled = true;
+      confirmRescheduleBtn.textContent = t('rescheduling');
+      callApi({
+        action: 'rescheduleAppointment',
+        eventId: currentRescheduleAppt.eventId,
+        date: rescheduleDateInput.value,
+        time: rescheduleSelectedTime
+      })
+        .then(function (res) {
+          if (res.success) {
+            confirmRescheduleBtn.classList.add('hidden');
+            rescheduleMsgEl.className = 'msg success';
+            rescheduleMsgEl.textContent = res.message;
+            rescheduleMsgEl.classList.remove('hidden');
+            lastFoundAppointments = lastFoundAppointments.filter(function (a) {
+              return a.eventId !== currentRescheduleAppt.eventId;
+            });
+          } else {
+            confirmRescheduleBtn.disabled = false;
+            confirmRescheduleBtn.textContent = t('rescheduleConfirmBtn');
+            rescheduleMsgEl.className = 'msg error';
+            rescheduleMsgEl.textContent = res.message || res.error || t('rescheduleGenericError');
+            rescheduleMsgEl.classList.remove('hidden');
+          }
+        })
+        .catch(function (err) {
+          confirmRescheduleBtn.disabled = false;
+          confirmRescheduleBtn.textContent = t('rescheduleConfirmBtn');
+          rescheduleMsgEl.className = 'msg error';
+          rescheduleMsgEl.textContent = t('rescheduleGenericError') + ': ' + err.message;
+          rescheduleMsgEl.classList.remove('hidden');
+        });
+    });
+
+    cancelRescheduleBtn.addEventListener('click', function () {
+      rescheduleCard.classList.add('hidden');
+      document.getElementById('cancelByPhoneCard').classList.remove('hidden');
+      currentRescheduleAppt = null;
+      renderAppointmentsList();
+    });
+
     // ==================== טופס ההזמנה הרגיל ====================
     let selectedType = 'regular';
     let selectedFormat = 'inperson';
@@ -683,6 +948,7 @@
 
     const today = new Date();
     dateInput.min = today.toISOString().split('T')[0];
+    document.getElementById('rescheduleDate').min = today.toISOString().split('T')[0];
 
     // ==================== ימי/שעות קבלת קהל וימים חסומים (חופשות) ====================
     let regularHours = {};
@@ -716,15 +982,23 @@
       return y + '-' + m + '-' + d;
     }
 
-    function buildDisableRules() {
+    function buildDisableRulesForHours(hoursMap) {
       return [
         function (date) {
-          return !currentHoursMap()[date.getDay()];
+          return !hoursMap[date.getDay()];
         },
         function (date) {
           return blockedFullDays.indexOf(formatDateLocal(date)) !== -1;
         }
       ];
+    }
+
+    function buildDisableRules() {
+      return buildDisableRulesForHours(currentHoursMap());
+    }
+
+    function hoursMapForType(typeKey) {
+      return typeKey === 'exam' ? examHours : regularHours;
     }
 
     function initFlatpickr() {
@@ -846,20 +1120,72 @@
         });
     }
 
+    // ==================== ולידציית מספר טלפון (צד לקוח) ====================
+    function isValidIsraeliPhone(phone) {
+      const digits = (phone || '').replace(/\D/g, '');
+      if (!/^0\d{8,9}$/.test(digits)) return false;
+      if (digits.length === 10 && digits[1] !== '5') return false;
+      return true;
+    }
+
+    const phoneErrorEl = document.getElementById('phoneError');
+
     function updateSubmitState() {
       const name = document.getElementById('name').value.trim();
       const phone = document.getElementById('phone').value.trim();
-      submitBtn.disabled = !(selectedTime && dateInput.value && name && phone);
+      let phoneValid = true;
+      if (phone) {
+        phoneValid = isValidIsraeliPhone(phone);
+        phoneErrorEl.textContent = t('invalidPhone');
+        phoneErrorEl.classList.toggle('hidden', phoneValid);
+      } else {
+        phoneErrorEl.classList.add('hidden');
+      }
+      submitBtn.disabled = !(selectedTime && dateInput.value && name && phone && phoneValid);
     }
 
     ['name', 'phone'].forEach(function (id) {
       document.getElementById(id).addEventListener('input', updateSubmitState);
     });
 
+    // ==================== קישור "הוספה ליומן" (ICS) ====================
+    function buildIcsDataUri(dateStr, timeStr, title, description) {
+      const dateParts = dateStr.split('-').map(Number);
+      const timeParts = timeStr.split(':').map(Number);
+      const start = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], timeParts[0], timeParts[1], 0);
+      const end = new Date(start.getTime() + 30 * 60000); // 30 דקות - תואם למשך הפגישה בשרת
+      function fmt(dt) {
+        const pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        return dt.getFullYear() + pad(dt.getMonth() + 1) + pad(dt.getDate()) + 'T' +
+          pad(dt.getHours()) + pad(dt.getMinutes()) + '00';
+      }
+      function escapeIcs(s) {
+        return String(s).replace(/[,;]/g, '\\$&').replace(/\n/g, '\\n');
+      }
+      const ics = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Tira Volunteering Booking//HE',
+        'BEGIN:VEVENT',
+        'UID:' + Date.now() + '-booking@tira-vol',
+        'DTSTAMP:' + fmt(new Date()),
+        'DTSTART:' + fmt(start),
+        'DTEND:' + fmt(end),
+        'SUMMARY:' + escapeIcs(title),
+        'DESCRIPTION:' + escapeIcs(description),
+        'END:VEVENT',
+        'END:VCALENDAR'
+      ].join('\r\n');
+      return 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+    }
+
+    const calendarLink = document.getElementById('calendarLink');
+
     submitBtn.addEventListener('click', function () {
       submitBtn.disabled = true;
       submitBtn.textContent = t('submitting');
       resultMsg.classList.add('hidden');
+      calendarLink.classList.add('hidden');
 
       const payload = {
         action: 'book',
@@ -888,6 +1214,14 @@
               cancelOwnBtn.onclick = function () {
                 window.location.href = window.location.pathname + '?cancel=' + encodeURIComponent(res.eventId);
               };
+              if (res.eventId !== 'x') {
+                calendarLink.href = buildIcsDataUri(
+                  payload.date, payload.time, t('calendarEventTitle'),
+                  t(selectedType) + ' - ' + t(selectedFormat)
+                );
+                calendarLink.textContent = t('addToCalendar');
+                calendarLink.classList.remove('hidden');
+              }
             }
           } else {
             resultMsg.className = 'msg error';
