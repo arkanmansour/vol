@@ -167,6 +167,36 @@
       color: #991b1b;
       margin-inline-end: 6px;
     }
+    .stat-box {
+      flex: 1;
+      background: #eef2ff;
+      border-radius: 10px;
+      padding: 14px;
+      text-align: center;
+    }
+    .stat-number {
+      font-size: 26px;
+      font-weight: bold;
+      color: #2563eb;
+    }
+    .stat-label {
+      font-size: 12px;
+      color: #444;
+      margin-top: 4px;
+    }
+    ul.stats-breakdown {
+      list-style: none;
+      margin: 6px 0 0 0;
+      padding: 0;
+      font-size: 13px;
+    }
+    ul.stats-breakdown li {
+      padding: 6px 10px;
+      border: 1px solid #eee;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      background: #fafafa;
+    }
   </style>
 </head>
 <body>
@@ -212,6 +242,32 @@
         <tbody id="apptBody"></tbody>
       </table>
       <div id="actionMsg" class="msg hidden"></div>
+    </div>
+  </div>
+
+  <div class="card secondary hidden" id="statsSection">
+    <h2>סטטיסטיקות</h2>
+    <div id="statsLoading" class="loading hidden">טוען נתונים...</div>
+    <div id="statsErrorMsg" class="msg error hidden"></div>
+    <div id="statsContent" class="hidden">
+      <div class="row" style="gap: 12px;">
+        <div class="stat-box">
+          <div class="stat-number" id="statWeek">0</div>
+          <div class="stat-label">תורים השבוע</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="statMonth">0</div>
+          <div class="stat-label">תורים החודש</div>
+        </div>
+      </div>
+      <div style="margin-top: 12px;">
+        <div class="field-label">לפי סוג פגישה</div>
+        <ul class="stats-breakdown" id="statsByType"></ul>
+      </div>
+      <div style="margin-top: 8px;">
+        <div class="field-label">לפי אופן הפגישה</div>
+        <ul class="stats-breakdown" id="statsByFormat"></ul>
+      </div>
     </div>
   </div>
 
@@ -293,13 +349,63 @@
     const countLabel = document.getElementById('countLabel');
     const actionMsg = document.getElementById('actionMsg');
     const blocksSection = document.getElementById('blocksSection');
+    const statsSection = document.getElementById('statsSection');
+    const statsLoading = document.getElementById('statsLoading');
+    const statsErrorMsg = document.getElementById('statsErrorMsg');
+    const statsContent = document.getElementById('statsContent');
 
     function showDashboard() {
       loginSection.classList.add('hidden');
       dashboardSection.classList.remove('hidden');
       blocksSection.classList.remove('hidden');
+      statsSection.classList.remove('hidden');
       loadAppointments();
       loadBlocks();
+      loadStats();
+    }
+
+    function loadStats() {
+      statsLoading.classList.remove('hidden');
+      statsErrorMsg.classList.add('hidden');
+      statsContent.classList.add('hidden');
+
+      callApi({ action: 'getStats', key: adminKey })
+        .then(function (res) {
+          statsLoading.classList.add('hidden');
+          if (!res.success) {
+            statsErrorMsg.textContent = res.error || 'שגיאה בטעינת נתונים';
+            statsErrorMsg.classList.remove('hidden');
+            return;
+          }
+          document.getElementById('statWeek').textContent = res.stats.week;
+          document.getElementById('statMonth').textContent = res.stats.month;
+
+          function renderBreakdown(elId, map) {
+            const ul = document.getElementById(elId);
+            ul.innerHTML = '';
+            const keys = Object.keys(map);
+            if (!keys.length) {
+              const li = document.createElement('li');
+              li.textContent = 'אין נתונים';
+              ul.appendChild(li);
+              return;
+            }
+            keys.sort(function (a, b) { return map[b] - map[a]; }).forEach(function (k) {
+              const li = document.createElement('li');
+              li.textContent = k + ': ' + map[k];
+              ul.appendChild(li);
+            });
+          }
+
+          renderBreakdown('statsByType', res.stats.byType || {});
+          renderBreakdown('statsByFormat', res.stats.byFormat || {});
+          statsContent.classList.remove('hidden');
+        })
+        .catch(function (err) {
+          statsLoading.classList.add('hidden');
+          statsErrorMsg.textContent = 'שגיאה: ' + err.message;
+          statsErrorMsg.classList.remove('hidden');
+        });
     }
 
     function loadAppointments() {
@@ -430,7 +536,10 @@
       showDashboard();
     });
 
-    document.getElementById('refreshBtn').addEventListener('click', loadAppointments);
+    document.getElementById('refreshBtn').addEventListener('click', function () {
+      loadAppointments();
+      loadStats();
+    });
     document.getElementById('phoneFilter').addEventListener('input', applyPhoneFilter);
 
     // ==================== חסימת ימים/שעות (חופשות) ====================

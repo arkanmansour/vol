@@ -276,6 +276,12 @@
     <label for="notes" id="t_notesLabel">ملاحظات (اختياري)</label>
     <textarea id="notes" rows="2" placeholder="تفاصيل إضافية..."></textarea>
 
+    <!-- שדה מלכודת-דבש (honeypot) נגד בוטים - מוסתר לחלוטין ממשתמשים אמיתיים -->
+    <div aria-hidden="true" style="position:absolute; left:-9999px; top:-9999px; width:1px; height:1px; overflow:hidden;">
+      <label for="website">Website</label>
+      <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+    </div>
+
     <button class="submit" id="submitBtn" disabled>حجز الموعد</button>
 
     <div id="resultMsg" class="msg hidden"></div>
@@ -307,6 +313,9 @@
   <script>
     // ==================== הגדרה - חובה לערוך ====================
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzY6Sxue7GP034D3ljtIn-A3Xy8ngJyXSdf8_GSYc1hKJsPF4pOdyehFX1gcvxWnHkt8Q/exec';
+
+    // חותמת זמן לטעינת הדף - משמשת הגנה עדינה מפני בוטים (שליחה מהירה מדי = חשוד)
+    const pageLoadTs = Date.now();
 
     // ==================== תרגומים ====================
     const translations = {
@@ -827,7 +836,9 @@
         meetingType: selectedType,
         meetingFormat: selectedFormat,
         date: dateInput.value,
-        time: selectedTime
+        time: selectedTime,
+        hp: document.getElementById('website').value,
+        ts: String(pageLoadTs)
       };
 
       callApi(payload)
