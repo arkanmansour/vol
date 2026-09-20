@@ -192,7 +192,8 @@ function getAvailableSlots(dateStr, meetingType, lang, excludeEventId) {
 
   const now = new Date();
   const todayStr = Utilities.formatDate(now, CONFIG.TIMEZONE, 'yyyy-MM-dd');
-  if (dateStr < todayStr) {
+  // אין אפשרות לקבוע תור לאותו יום - קביעה אפשרית רק מיום המחרת ואילך
+  if (dateStr <= todayStr) {
     return { slots: [], reason: 'past_date' };
   }
 
