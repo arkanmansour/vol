@@ -960,10 +960,21 @@
     let regularHours = {};
     let examHours = {};
     let blockedFullDays = [];
+    let meetingDurationMinutes = 30;
     let fp = null; // מופע flatpickr
 
     function currentHoursMap() {
       return selectedType === 'exam' ? examHours : regularHours;
+    }
+
+    // מחשב את שעת התחלת התור האחרון (שעת הסיום שהוגדרה פחות משך פגישה),
+    // כדי שההסבר יציג את השעה שבה אפשר בפועל לקבוע תור אחרון, ולא את שעת סגירת המשרד.
+    function lastSlotStartTime(endStr) {
+      const parts = endStr.split(':');
+      const totalMinutes = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10) - meetingDurationMinutes;
+      const h = Math.floor(totalMinutes / 60);
+      const m = totalMinutes % 60;
+      return ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
     }
 
     function renderHoursInfo() {
@@ -972,7 +983,7 @@
       const parts = [];
       for (let d = 0; d <= 6; d++) {
         if (hoursMap[d]) {
-          parts.push(dayNames[d] + ' ' + hoursMap[d].start + '-' + hoursMap[d].end);
+          parts.push(dayNames[d] + ' ' + hoursMap[d].start + '-' + lastSlotStartTime(hoursMap[d].end));
         }
       }
       const el = document.getElementById('hoursInfo');
@@ -1041,6 +1052,7 @@
             regularHours = res.hours.regular || {};
             examHours = res.hours.exam || {};
             blockedFullDays = res.blockedFullDays || [];
+            if (res.duration) meetingDurationMinutes = res.duration;
           }
         })
         .catch(function () {
